@@ -13,6 +13,7 @@
 -- limitations under the License.
 
 local capabilities = require "st.capabilities"
+local im = require "st.matter.interaction_model"
 local log = require "log"
 local clusters = require "st.matter.clusters"
 local MatterDriver = require "st.matter.driver"
@@ -32,6 +33,10 @@ local COLOR_TEMPERATURE_MIRED_MIN = CONVERSION_CONSTANT/COLOR_TEMPERATURE_KELVIN
 
 local SWITCH_INITIALIZED = "__switch_intialized"
 local COMPONENT_TO_ENDPOINT_MAP = "__component_to_endpoint_map"
+local COLOR_TEMP_MIN = "__color_temp_min"
+local COLOR_TEMP_MAX = "__color_temp_max"
+local LEVEL_MIN = "__level_min"
+local LEVEL_MAX = "__level_max"
 local AGGREGATOR_DEVICE_TYPE_ID = 0x000E
 local detect_matter_thing
 
@@ -262,6 +267,28 @@ local function level_attr_handler(driver, device, ib, response)
   end
 end
 
+local function level_min_attr_handler(driver, device, ib, response)
+  if ib.data.value ~= nil then
+    local level = math.floor((ib.data.value / 254.0 * 100) + 0.5)
+    device:set_field(LEVEL_MIN, level)
+    local level_max = device:get_field(LEVEL_MAX)
+    if level_max then
+      device:emit_event_for_endpoint(ib.endpoint_id, capabilities.switchLevel.levelRange({minimum = level, maximum = level_max}))
+    end
+  end
+end
+
+local function level_max_attr_handler(driver, device, ib, response)
+  if ib.data.value ~= nil then
+    local level = math.floor((ib.data.value / 254.0 * 100) + 0.5)
+    device:set_field(LEVEL_MAX, level)
+    local level_min = device:get_field(LEVEL_MIN)
+    if level_min then
+      device:emit_event_for_endpoint(ib.endpoint_id, capabilities.switchLevel.levelRange({minimum = level_min, maximum = level}))
+    end
+  end
+end
+
 local function hue_attr_handler(driver, device, ib, response)
   if ib.data.value ~= nil then
     local hue = math.floor((ib.data.value / 0xFE * 100) + 0.5)
@@ -292,6 +319,52 @@ local function temp_attr_handler(driver, device, ib, response)
     end
     device:emit_event_for_endpoint(ib.endpoint_id, capabilities.colorTemperature.colorTemperature(temp))
   end
+end
+
+local function color_temp_min_attr_handler(driver, device, ib, response)
+  if ib.data.value ~= nil then
+    if (ib.data.value < COLOR_TEMPERATURE_MIRED_MIN or ib.data.value > COLOR_TEMPERATURE_MIRED_MAX) then
+      device.log.warn_with({hub_logs = true}, string.format("Device reported minimum color temperature %d mired outside of supported capability range", ib.data.value))
+      return
+    end
+    local temp = utils.round(CONVERSION_CONSTANT/ib.data.value)
+    device:set_field(COLOR_TEMP_MIN, temp)
+    local color_temp_max = device:get_field(COLOR_TEMP_MAX)
+    if color_temp_max then
+      device:emit_event_for_endpoint(ib.endpoint_id, capabilities.colorTemperature.colorTemperatureRange({minimum = temp, maximum = color_temp_max}))
+    end
+  end
+end
+
+local function color_temp_max_attr_handler(driver, device, ib, response)
+  if ib.data.value ~= nil then
+    if (ib.data.value < COLOR_TEMPERATURE_MIRED_MIN or ib.data.value > COLOR_TEMPERATURE_MIRED_MAX) then
+      device.log.warn_with({hub_logs = true}, string.format("Device reported maximum color temperature %d mired outside of supported capability range", ib.data.value))
+      return
+    end
+    local temp = utils.round(CONVERSION_CONSTANT/ib.data.value)
+    device:set_field(COLOR_TEMP_MAX, temp)
+    local color_temp_min = device:get_field(COLOR_TEMP_MIN)
+    if color_temp_min then
+      device:emit_event_for_endpoint(ib.endpoint_id, capabilities.colorTemperature.colorTemperatureRange({minimum = color_temp_min, maximum = temp}))
+    end
+  end
+end
+
+local function device_added(self, device)
+  local color_temp_eps = device:get_endpoints(clusters.ColorControl.ID, {feature_bitmap = clusters.ColorControl.types.ColorControlFeature.COLOR_TEMPERATURE})
+  local level_eps = device:get_endpoints(clusters.LevelControl.ID, {feature_bitmap = clusters.LevelControl.types.LevelControlFeature.LIGHTING})
+
+  local limit_read = im.InteractionRequest(im.InteractionRequest.RequestType.READ, {})
+  if #color_temp_eps ~= 0 then
+    limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:read())
+    limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:read())
+  end
+  if #level_eps ~= 0 then
+    limit_read:merge(clusters.LevelControl.attributes.MinLevel:read())
+    limit_read:merge(clusters.LevelControl.attributes.MaxLevel:read())
+  end
+  device:send(limit_read)
 end
 
 local color_utils = require "color_utils"
@@ -342,6 +415,7 @@ end
 local matter_driver_template = {
   lifecycle_handlers = {
     init = device_init,
+    added = device_added,
     removed = device_removed,
     infoChanged = info_changed
   },
@@ -351,7 +425,9 @@ local matter_driver_template = {
         [clusters.OnOff.attributes.OnOff.ID] = on_off_attr_handler,
       },
       [clusters.LevelControl.ID] = {
-        [clusters.LevelControl.attributes.CurrentLevel.ID] = level_attr_handler
+        [clusters.LevelControl.attributes.CurrentLevel.ID] = level_attr_handler,
+        [clusters.LevelControl.attributes.MinLevel.ID] = level_min_attr_handler,
+        [clusters.LevelControl.attributes.MaxLevel.ID] = level_max_attr_handler,
       },
       [clusters.ColorControl.ID] = {
         [clusters.ColorControl.attributes.CurrentHue.ID] = hue_attr_handler,
@@ -360,6 +436,8 @@ local matter_driver_template = {
         [clusters.ColorControl.attributes.CurrentX.ID] = x_attr_handler,
         [clusters.ColorControl.attributes.CurrentY.ID] = y_attr_handler,
         [clusters.ColorControl.attributes.ColorCapabilities.ID] = color_cap_attr_handler,
+        [clusters.ColorControl.attributes.ColorTempPhysicalMinMireds.ID] = color_temp_min_attr_handler,
+        [clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds.ID] = color_temp_max_attr_handler,
       }
     },
     fallback = matter_handler,
