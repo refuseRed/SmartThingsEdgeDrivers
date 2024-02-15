@@ -332,6 +332,8 @@ local function color_temp_min_attr_handler(driver, device, ib, response)
     local color_temp_max = device:get_field(COLOR_TEMP_MAX)
     if color_temp_max then
       device:emit_event_for_endpoint(ib.endpoint_id, capabilities.colorTemperature.colorTemperatureRange({minimum = temp, maximum = color_temp_max}))
+      device:set_field(COLOR_TEMP_MIN, nil)
+      device:set_field(COLOR_TEMP_MAX, nil)
     end
   end
 end
@@ -347,6 +349,8 @@ local function color_temp_max_attr_handler(driver, device, ib, response)
     local color_temp_min = device:get_field(COLOR_TEMP_MIN)
     if color_temp_min then
       device:emit_event_for_endpoint(ib.endpoint_id, capabilities.colorTemperature.colorTemperatureRange({minimum = color_temp_min, maximum = temp}))
+      device:set_field(COLOR_TEMP_MIN, nil)
+      device:set_field(COLOR_TEMP_MAX, nil)
     end
   end
 end
