@@ -262,4 +262,42 @@ test.register_message_test(
       },
     }
 )
+
+test.register_message_test(
+  "Min and max temperature attributes set capability constraint",
+  {
+    {
+      channel = "matter",
+      direction = "receive",
+      message = {
+        mock_device.id,
+        clusters.TemperatureMeasurement.attributes.MinMeasuredValue:build_test_report_data(mock_device, 1, 500)
+      }
+    },
+    {
+      channel = "matter",
+      direction = "receive",
+      message = {
+        mock_device.id,
+        clusters.TemperatureMeasurement.attributes.MaxMeasuredValue:build_test_report_data(mock_device, 1, 4000)
+      }
+    },
+    {
+      channel = "capability",
+      direction = "send",
+      message = mock_device:generate_test_message("main", capabilities.temperatureMeasurement.temperatureRange({ value = { minimum = 5.00, maximum = 40.00 }, unit = "C" }))
+    }
+  }
+)
+
+test.register_coroutine_test(
+  "Added lifecycle event requests temperature limits from device based on cluster feature map",
+  function()
+    test.socket.device_lifecycle:__queue_receive({ mock_device.id, "added" })
+    local temp_limit_read = clusters.TemperatureMeasurement.attributes.MinMeasuredValue:read()
+    temp_limit_read:merge(clusters.TemperatureMeasurement.attributes.MaxMeasuredValue:read())
+    test.socket.matter:__expect_send({mock_device.id, temp_limit_read})
+  end
+)
+
 test.run_registered_tests()
