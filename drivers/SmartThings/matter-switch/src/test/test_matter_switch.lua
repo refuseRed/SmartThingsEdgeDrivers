@@ -556,7 +556,7 @@ test.register_message_test(
       direction = "receive",
       message = {
         mock_device.id,
-        clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:build_test_report_data(mock_device, 1, 500)
+        clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:build_test_report_data(mock_device, 1, 153)
       }
     },
     {
@@ -564,13 +564,13 @@ test.register_message_test(
       direction = "receive",
       message = {
         mock_device.id,
-        clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:build_test_report_data(mock_device, 1, 125)
+        clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:build_test_report_data(mock_device, 1, 555)
       }
     },
     {
       channel = "capability",
       direction = "send",
-      message = mock_device:generate_test_message("main", capabilities.colorTemperature.colorTemperatureRange({minimum = 2000, maximum = 8000}))
+      message = mock_device:generate_test_message("main", capabilities.colorTemperature.colorTemperatureRange({minimum = 1800, maximum = 6500}))
     }
   }
 )
@@ -603,13 +603,13 @@ test.register_message_test(
 )
 
 test.register_coroutine_test(
-  "Added lifecycle event requests color temperature and level limits from device based on cluster feature map",
+  "added lifecycle event requests color temperature and level limits from device based on cluster feature map",
   function()
     test.socket.device_lifecycle:__queue_receive({ mock_device.id, "added" })
-    local limit_read = clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:read()
-    limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:read())
-    limit_read:merge(clusters.LevelControl.attributes.MinLevel:read())
+    local limit_read = clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:read()
+    limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:read())
     limit_read:merge(clusters.LevelControl.attributes.MaxLevel:read())
+    limit_read:merge(clusters.LevelControl.attributes.MinLevel:read())
     test.socket.matter:__expect_send({mock_device.id, limit_read})
   end
 )
