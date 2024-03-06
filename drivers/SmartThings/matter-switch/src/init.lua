@@ -320,10 +320,14 @@ local mired_bounds_handler_factory = function(minOrMax)
       device:set_field(COLOR_TEMP_BOUND_RECEIVED..minOrMax, temp_in_kelvin)
       local min = device:get_field(COLOR_TEMP_BOUND_RECEIVED..COLOR_TEMP_MIN)
       local max = device:get_field(COLOR_TEMP_BOUND_RECEIVED..COLOR_TEMP_MAX)
-      if min ~= nil and max ~= nil and min < max then
-        device:emit_event_for_endpoint(ib.endpoint_id, capabilities.colorTemperature.colorTemperatureRange({ value = {minimum = min, maximum = max} }))
-        device:set_field(COLOR_TEMP_BOUND_RECEIVED..COLOR_TEMP_MAX, nil)
-        device:set_field(COLOR_TEMP_BOUND_RECEIVED..COLOR_TEMP_MIN, nil)
+      if min ~= nil and max ~= nil then
+        if min < max then
+          device:emit_event_for_endpoint(ib.endpoint_id, capabilities.colorTemperature.colorTemperatureRange({ value = {minimum = min, maximum = max} }))
+          device:set_field(COLOR_TEMP_BOUND_RECEIVED..COLOR_TEMP_MAX, nil)
+          device:set_field(COLOR_TEMP_BOUND_RECEIVED..COLOR_TEMP_MIN, nil)
+        else
+          device.log.warn_with({hub_logs = true}, string.format("Device reported a min color temperature %d mired that is not lower than the reported max color temperature %d mired", min, max))
+        end
       end
     end
   end
@@ -332,14 +336,18 @@ end
 local level_bounds_handler_factory = function(minOrMax)
   return function(driver, device, ib, response)
     if ib.data.value ~= nil then
-      local level = math.floor((ib.data.value / 254.0 * 100) + 0.5)
+      local level = utils.round(ib.data.value / 254.0 * 100)
       device:set_field(LEVEL_BOUND_RECEIVED..minOrMax, level)
       local min = device:get_field(LEVEL_BOUND_RECEIVED..LEVEL_MIN)
       local max = device:get_field(LEVEL_BOUND_RECEIVED..LEVEL_MAX)
-      if min ~= nil and max ~= nil and min < max then
-        device:emit_event_for_endpoint(ib.endpoint_id, capabilities.switchLevel.levelRange({ value = {minimum = min, maximum = max} }))
-        device:set_field(LEVEL_BOUND_RECEIVED..LEVEL_MAX, nil)
-        device:set_field(LEVEL_BOUND_RECEIVED..LEVEL_MIN, nil)
+      if min ~= nil and max ~= nil then
+        if min < max then
+          device:emit_event_for_endpoint(ib.endpoint_id, capabilities.switchLevel.levelRange({ value = {minimum = min, maximum = max} }))
+          device:set_field(LEVEL_BOUND_RECEIVED..LEVEL_MAX, nil)
+          device:set_field(LEVEL_BOUND_RECEIVED..LEVEL_MIN, nil)
+        else
+          device.log.warn_with({hub_logs = true}, string.format("Device reported a min level value %d that is not lower than the reported max level value %d", min, max))
+        end
       end
     end
   end
