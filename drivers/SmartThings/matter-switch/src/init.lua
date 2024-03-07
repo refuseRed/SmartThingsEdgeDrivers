@@ -33,6 +33,7 @@ local COLOR_TEMPERATURE_MIRED_MIN = CONVERSION_CONSTANT/COLOR_TEMPERATURE_KELVIN
 
 local SWITCH_INITIALIZED = "__switch_intialized"
 local COMPONENT_TO_ENDPOINT_MAP = "__component_to_endpoint_map"
+local BOUNDS_CHECKED = "__bounds_checked"
 local COLOR_TEMP_BOUND_RECEIVED = "colorTemp_bound_received"
 local COLOR_TEMP_MIN = "__color_temp_min"
 local COLOR_TEMP_MAX = "__color_temp_max"
@@ -161,6 +162,20 @@ local function device_init(driver, device)
     device:set_endpoint_to_component_fn(endpoint_to_component)
     device:set_find_child(find_child)
     device:subscribe()
+
+    if not device:get_field(BOUNDS_CHECKED) then
+      local limit_read = im.InteractionRequest(im.InteractionRequest.RequestType.READ, {})
+      if device:supports_capability(capabilities.colorTemperature) then
+        limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:read())
+        limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:read())
+      end
+      if device:supports_capability(capabilities.switchLevel) then
+        limit_read:merge(clusters.LevelControl.attributes.MinLevel:read())
+        limit_read:merge(clusters.LevelControl.attributes.MaxLevel:read())
+      end
+      device:send(limit_read)
+      device:set_field(BOUNDS_CHECKED, true)
+    end
   end
 end
 
@@ -398,23 +413,9 @@ local function info_changed(driver, device, event, args)
   end
 end
 
-local function device_added(driver, device, event, args)
-  local limit_read = im.InteractionRequest(im.InteractionRequest.RequestType.READ, {})
-  if device:supports_capability(capabilities.colorTemperature) then
-    limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:read())
-    limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:read())
-  end
-  if device:supports_capability(capabilities.switchLevel) then
-    limit_read:merge(clusters.LevelControl.attributes.MinLevel:read())
-    limit_read:merge(clusters.LevelControl.attributes.MaxLevel:read())
-  end
-  device:send(limit_read)
-end
-
 local matter_driver_template = {
   lifecycle_handlers = {
     init = device_init,
-    added = device_added,
     removed = device_removed,
     infoChanged = info_changed
   },
