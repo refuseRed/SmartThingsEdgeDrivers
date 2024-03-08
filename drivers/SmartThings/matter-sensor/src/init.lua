@@ -20,9 +20,10 @@ local MatterDriver = require "st.matter.driver"
 local utils = require "st.utils"
 
 local BATTERY_CHECKED = "__battery_checked"
+local BOUNDS_CHECKED = "__bounds_checked"
+local TEMP_BOUND_RECEIVED = "temp_bound_received"
 local TEMP_MIN = "__temp_min"
 local TEMP_MAX = "__temp_max"
-local TEMP_BOUND_RECEIVED = "temp_bound_received"
 
 local HUE_MANUFACTURER_ID = 0x100B
 
@@ -77,12 +78,15 @@ local function device_init(driver, device)
   end
   device:subscribe()
 
-  local temp_eps = device:get_endpoints(clusters.TemperatureMeasurement.ID)
-  if #temp_eps ~= 0 then
-    local temp_limit_read = im.InteractionRequest(im.InteractionRequest.RequestType.READ, {})
-    temp_limit_read:merge(clusters.TemperatureMeasurement.attributes.MinMeasuredValue:read())
-    temp_limit_read:merge(clusters.TemperatureMeasurement.attributes.MaxMeasuredValue:read())
-    device:send(temp_limit_read)
+  if not device:get_field(BOUNDS_CHECKED) then
+    local temp_eps = device:get_endpoints(clusters.TemperatureMeasurement.ID)
+    if #temp_eps ~= 0 then
+      local temp_limit_read = im.InteractionRequest(im.InteractionRequest.RequestType.READ, {})
+      temp_limit_read:merge(clusters.TemperatureMeasurement.attributes.MinMeasuredValue:read())
+      temp_limit_read:merge(clusters.TemperatureMeasurement.attributes.MaxMeasuredValue:read())
+      device:send(temp_limit_read)
+    end
+    device:set_field(BOUNDS_CHECKED, true)
   end
 end
 
