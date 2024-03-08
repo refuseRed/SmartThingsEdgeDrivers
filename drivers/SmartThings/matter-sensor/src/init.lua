@@ -22,6 +22,7 @@ local utils = require "st.utils"
 local BATTERY_CHECKED = "__battery_checked"
 local TEMP_MIN = "__temp_min"
 local TEMP_MAX = "__temp_max"
+local TEMP_BOUND_RECEIVED = "temp_bound_received"
 
 local HUE_MANUFACTURER_ID = 0x100B
 
@@ -75,9 +76,7 @@ local function device_init(driver, device)
     check_for_battery(device)
   end
   device:subscribe()
-end
 
-local function device_added(self, device)
   local temp_eps = device:get_endpoints(clusters.TemperatureMeasurement.ID)
   if #temp_eps ~= 0 then
     local temp_limit_read = im.InteractionRequest(im.InteractionRequest.RequestType.READ, {})
@@ -104,30 +103,23 @@ local function temperature_attr_handler(driver, device, ib, response)
   device:emit_event_for_endpoint(ib.endpoint_id, capabilities.temperatureMeasurement.temperature({value = temp, unit = unit}))
 end
 
-local function temperature_min_attr_handler(driver, device, ib, response)
-  if ib.data.value ~= nil then
-    local temp = ib.data.value / 100.0
-    local unit = "C"
-    device:set_field(TEMP_MIN, temp)
-    local temp_max = device:get_field(TEMP_MAX)
-    if temp_max then
-      device:emit_event_for_endpoint(ib.endpoint_id, capabilities.temperatureMeasurement.temperatureRange({ value = { minimum = temp, maximum = temp_max }, unit = unit }))
-      device:set_field(TEMP_MIN, nil)
-      device:set_field(TEMP_MAX, nil)
-    end
-  end
-end
-
-local function temperature_max_attr_handler(driver, device, ib, response)
-  if ib.data.value ~= nil then
-    local temp = ib.data.value / 100.0
-    local unit = "C"
-    device:set_field(TEMP_MAX, temp)
-    local temp_min = device:get_field(TEMP_MIN)
-    if temp_min then
-      device:emit_event_for_endpoint(ib.endpoint_id, capabilities.temperatureMeasurement.temperatureRange({ value = { minimum = temp_min, maximum = temp }, unit = unit }))
-      device:set_field(TEMP_MIN, nil)
-      device:set_field(TEMP_MAX, nil)
+local temp_attr_handler_factory = function(minOrMax)
+  return function(driver, device, ib, response)
+    if ib.data.value ~= nil then
+      local temp = ib.data.value / 100.0
+      local unit = "C"
+      device:set_field(TEMP_BOUND_RECEIVED..minOrMax, temp)
+      local min = device:get_field(TEMP_BOUND_RECEIVED..TEMP_MIN)
+      local max = device:get_field(TEMP_BOUND_RECEIVED..TEMP_MAX)
+      if min ~= nil and max ~= nil then
+        if min < max then
+          device:emit_event_for_endpoint(ib.endpoint_id, capabilities.temperatureMeasurement.temperatureRange({ value = { minimum = min, maximum = max }, unit = unit }))
+          device:set_field(TEMP_BOUND_RECEIVED..TEMP_MIN, nil)
+          device:set_field(TEMP_BOUND_RECEIVED..TEMP_MAX, nil)
+        else
+          device.log.warn_with({hub_logs = true}, string.format("Device reported a min temperature %d that is not lower than the reported max temperature %d", min, max))
+        end
+      end
     end
   end
 end
@@ -159,7 +151,6 @@ end
 local matter_driver_template = {
   lifecycle_handlers = {
     init = device_init,
-    added = device_added,
     infoChanged = info_changed
   },
   matter_handlers = {
@@ -169,8 +160,8 @@ local matter_driver_template = {
       },
       [clusters.TemperatureMeasurement.ID] = {
         [clusters.TemperatureMeasurement.attributes.MeasuredValue.ID] = temperature_attr_handler,
-        [clusters.TemperatureMeasurement.attributes.MinMeasuredValue.ID] = temperature_min_attr_handler,
-        [clusters.TemperatureMeasurement.attributes.MaxMeasuredValue.ID] = temperature_max_attr_handler,
+        [clusters.TemperatureMeasurement.attributes.MinMeasuredValue.ID] = temp_attr_handler_factory(TEMP_MIN),
+        [clusters.TemperatureMeasurement.attributes.MaxMeasuredValue.ID] = temp_attr_handler_factory(TEMP_MAX),
       },
       [clusters.IlluminanceMeasurement.ID] = {
         [clusters.IlluminanceMeasurement.attributes.MeasuredValue.ID] = illuminance_attr_handler

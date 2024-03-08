@@ -72,6 +72,11 @@ end
 
 local function test_init()
   test.socket.matter:__expect_send({mock_device.id, subscribe_on_init(mock_device)})
+
+  local temp_limit_read = clusters.TemperatureMeasurement.attributes.MinMeasuredValue:read()
+  temp_limit_read:merge(clusters.TemperatureMeasurement.attributes.MaxMeasuredValue:read())
+  test.socket.matter:__expect_send({mock_device.id, temp_limit_read})
+
   test.mock_device.add_test_device(mock_device)
   -- don't check the battery for this device because we are using the catch-all "sensor.yml" profile just for testing
   mock_device:set_field("__battery_checked", 1, {persist = true})
@@ -288,16 +293,6 @@ test.register_message_test(
       message = mock_device:generate_test_message("main", capabilities.temperatureMeasurement.temperatureRange({ value = { minimum = 5.00, maximum = 40.00 }, unit = "C" }))
     }
   }
-)
-
-test.register_coroutine_test(
-  "Added lifecycle event requests temperature limits from device based on cluster feature map",
-  function()
-    test.socket.device_lifecycle:__queue_receive({ mock_device.id, "added" })
-    local temp_limit_read = clusters.TemperatureMeasurement.attributes.MinMeasuredValue:read()
-    temp_limit_read:merge(clusters.TemperatureMeasurement.attributes.MaxMeasuredValue:read())
-    test.socket.matter:__expect_send({mock_device.id, temp_limit_read})
-  end
 )
 
 test.run_registered_tests()
