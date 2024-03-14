@@ -99,13 +99,15 @@ local function test_init()
 
   local limit_read = clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:read()
   limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:read())
-  limit_read:merge(clusters.LevelControl.attributes.MaxLevel:read())
+  test.socket.matter:__expect_send({mock_device.id, limit_read})
+
+  limit_read = clusters.LevelControl.attributes.MaxLevel:read()
   limit_read:merge(clusters.LevelControl.attributes.MinLevel:read())
   test.socket.matter:__expect_send({mock_device.id, limit_read})
 
   test.mock_device.add_test_device(mock_device)
 
-  local subscribe_request = cluster_subscribe_list[1]:subscribe(mock_device_no_hue_sat)
+  subscribe_request = cluster_subscribe_list[1]:subscribe(mock_device_no_hue_sat)
   for i, cluster in ipairs(cluster_subscribe_list) do
     if i > 1 then
       subscribe_request:merge(cluster:subscribe(mock_device_no_hue_sat))
@@ -115,7 +117,9 @@ local function test_init()
 
   limit_read = clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:read()
   limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:read())
-  limit_read:merge(clusters.LevelControl.attributes.MaxLevel:read())
+  test.socket.matter:__expect_send({mock_device_no_hue_sat.id, limit_read})
+
+  limit_read = clusters.LevelControl.attributes.MaxLevel:read()
   limit_read:merge(clusters.LevelControl.attributes.MinLevel:read())
   test.socket.matter:__expect_send({mock_device_no_hue_sat.id, limit_read})
 

@@ -164,16 +164,19 @@ local function device_init(driver, device)
     device:subscribe()
 
     if not device:get_field(BOUNDS_CHECKED) then
-      local limit_read = im.InteractionRequest(im.InteractionRequest.RequestType.READ, {})
+      local limit_read
       if device:supports_capability(capabilities.colorTemperature) then
+        limit_read = im.InteractionRequest(im.InteractionRequest.RequestType.READ, {})
         limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMinMireds:read())
         limit_read:merge(clusters.ColorControl.attributes.ColorTempPhysicalMaxMireds:read())
+        device:send(limit_read)
       end
       if device:supports_capability(capabilities.switchLevel) then
+        limit_read = im.InteractionRequest(im.InteractionRequest.RequestType.READ, {})
         limit_read:merge(clusters.LevelControl.attributes.MinLevel:read())
         limit_read:merge(clusters.LevelControl.attributes.MaxLevel:read())
+        device:send(limit_read)
       end
-      device:send(limit_read)
       device:set_field(BOUNDS_CHECKED, true)
     end
   end
